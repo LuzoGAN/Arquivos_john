@@ -1,51 +1,54 @@
+from flask import Flask, request, render_template, send_from_directory
 import pandas as pd
-import flet as ft
-from flet import FilePicker, FilePickerResultEvent
 import os
+import zipfile
 
-usuario = os.getlogin()
+app = Flask(__name__)
+UPLOAD_FOLDER = 'uploads'
+RESULT_FOLDER = 'results'
 
-def dividir_excel(excel_file, output_dir = f"C:\\Users\\{usuario}\\Downloads", linhas_por_arquivo=10000):
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(RESULT_FOLDER, exist_ok=True)
+
+def dividir_excel(excel_file, output_dir, linhas_por_arquivo=10000):
     df = pd.read_excel(excel_file)
     os.makedirs(output_dir, exist_ok=True)
     total_linhas = len(df)
     num_files = (total_linhas // linhas_por_arquivo) + int(total_linhas % linhas_por_arquivo != 0)
+    output_files = []
     for i in range(num_files):
         start_row = i * linhas_por_arquivo
-        end_row = min((i +1) * linhas_por_arquivo, total_linhas)
+        end_row = min((i + 1) * linhas_por_arquivo, total_linhas)
         df_chunk = df.iloc[start_row:end_row]
         txt_data = df_chunk.to_csv(index=False, sep="\t")
         output_file = os.path.join(output_dir, f"Arquivo_{i + 1}.txt")
-        with open (output_file, "w", encoding='utf-8') as f:
+        with open(output_file, "w", encoding='utf-8') as f:
             f.write(txt_data)
-def main(page: ft.Page):
-    page.title = "Dividor Arquivos de Telefone"
-    page.vertical_alignment = ft.MainAxisAlignment.CENTER
+        output_files.append(output_file)
+    return output_files
 
-    def on_file_picked(e: FilePickerResultEvent):
-        if e.files:
-            file_path = e.files[0].path
-            dividir_excel(file_path)
-            file_label.value = f"Arquivo selecionado: {file_path}"
-            page.update()
+@app.route('/')
+def index():
+    return render_template('index.html')
 
-    file_picker = FilePicker(on_result=on_file_picked)
-    file_label = ft.Text("Nenhum arquivo selecionado")
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return "Nenhum arquivo enviado"
+    file = request.files['file']
+    if file.filename == '':
+        return "Nenhum arquivo selecionado"
+    if file and file.filename.endswith('.xlsx'):
+        file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+        file.save(file_path)
+        output_files = dividir_excel(file_path, RESULT_FOLDER)
+        zip_path = os.path.join(RESULT_FOLDER, 'result.zip')
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            for file in output_files:
+                zipf.write(file, os.path.basename(file))
+        return send_from_directory(directory=RESULT_FOLDER, path='result.zip', as_attachment=True)
+    else:
+        return "Formato de arquivo não suportado"
 
-    select_file_button = ft.ElevatedButton(
-        text="Selecionar arquivo Excel",
-        on_click=lambda _: file_picker.pick_files(allowed_extensions=["xlsx"])
-    )
-
-
-    page.add(
-        ft.Row(
-            [
-                select_file_button, file_label
-            ], alignment=ft.MainAxisAlignment.CENTER
-        )
-    )
-    page.overlay.append(file_picker)
-    page.update()
-
-ft.app(target=main)
+if __name__ == '__main__':
+    app.run(debug=True)
