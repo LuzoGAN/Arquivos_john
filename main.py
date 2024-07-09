@@ -10,7 +10,7 @@ RESULT_FOLDER = 'results'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULT_FOLDER, exist_ok=True)
 
-def dividir_excel(excel_file, output_dir, linhas_por_arquivo=10000):
+def dividir_excel(excel_file, output_dir, linhas_por_arquivo=9998):
     df = pd.read_excel(excel_file)
     os.makedirs(output_dir, exist_ok=True)
     total_linhas = len(df)
